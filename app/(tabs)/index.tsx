@@ -1,98 +1,230 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import React, { useState } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  SafeAreaView, 
+  ScrollView, 
+  TouchableOpacity,
+  Dimensions,
+  Platform,
+  Alert
+} from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '@/constants/theme';
+import { DocumentItem } from '@/components/DocumentItem';
+import { Button } from '@/components/Button';
+import * as DocumentPicker from 'expo-document-picker';
+import { documentService } from '@/services/api';
+import { router } from 'expo-router';
+import { useAuthStore } from '@/store/useAuthStore';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+const { width } = Dimensions.get('window');
 
-export default function HomeScreen() {
+const DOCUMENTS = [
+  { id: '1', title: 'The Green Mile', progress: 30 },
+  { id: '2', title: 'The Shawsha...', progress: 35 },
+  { id: '3', title: 'Forrest Gump', progress: 40 },
+];
+
+export default function DashboardScreen() {
+  const [activeFilter, setActiveFilter] = useState('Website');
+  const [loading, setLoading] = useState(false);
+  const [documents, setDocuments] = useState(DOCUMENTS);
+  const accessToken = useAuthStore((state) => state.accessToken);
+
+  const handleUpload = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain'],
+      });
+
+      if (!result.canceled) {
+        setLoading(true);
+        if (!accessToken) {
+          Alert.alert('Error', 'No access token found. Please log in again.');
+          return;
+        }
+        const response = await documentService.uploadDocument(result.assets[0].uri, accessToken);
+        
+        if (response.document_id) {
+          const newDoc = {
+            id: response.document_id,
+            title: response.document_title || result.assets[0].name,
+            progress: 0
+          };
+          
+          setDocuments(prev => [newDoc, ...prev]);
+
+          router.push({
+            pathname: `/reader/${response.document_id}`,
+            params: { title: newDoc.title }
+          });
+        } else {
+          alert('Upload failed: No document ID returned.');
+        }
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to upload document.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <View style={styles.profileCircle}>
+          <Text style={styles.profileInitial}>S</Text>
+        </View>
+        <View style={styles.headerIcons}>
+          <TouchableOpacity style={styles.iconButton}>
+            <Ionicons name="search-outline" size={24} color="#000" />
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.iconButton}>
+            <Ionicons name="create-outline" size={24} color="#000" />
+          </TouchableOpacity>
+        </View>
+      </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <Text style={styles.welcomeText}>Welcome back, Sobby</Text>
+
+        <View style={styles.filterRow}>
+          <TouchableOpacity 
+            style={[styles.filterChip, activeFilter === 'Website' && styles.filterChipActive]}
+            onPress={() => setActiveFilter('Website')}
+          >
+            <Ionicons name="globe-outline" size={18} color={activeFilter === 'Website' ? '#000' : '#666'} />
+            <Text style={[styles.filterText, activeFilter === 'Website' && styles.filterTextActive]}>Website</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={[styles.filterChip, activeFilter === 'Fanfiction' && styles.filterChipActive]}
+            onPress={() => setActiveFilter('Fanfiction')}
+          >
+            <Ionicons name="flash-outline" size={18} color={activeFilter === 'Fanfiction' ? '#000' : '#666'} />
+            <Text style={[styles.filterText, activeFilter === 'Fanfiction' && styles.filterTextActive]}>Fanfiction</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.documentList}>
+          {documents.map((doc) => (
+            <DocumentItem 
+              key={doc.id} 
+              title={doc.title} 
+              progress={doc.progress} 
+              onPress={() => router.push({
+                pathname: `/reader/${doc.id}`,
+                params: { title: doc.title }
+              })}
+            />
+          ))}
+        </View>
+
+        <View style={styles.uploadSection}>
+          <Button 
+            title="Upload a new doc" 
+            variant="primary" 
+            onPress={handleUpload}
+            loading={loading}
+            style={styles.uploadButton}
+          />
+          <Text style={styles.supportText}>Supported formats: PDF, DOC, DOCX, TXT</Text>
+          <Text style={styles.supportText}>(Max 50MB)</Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
+  container: {
+    flex: 1,
+    backgroundColor: '#fff',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+  },
+  profileCircle: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#E0E0E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  profileInitial: {
+    fontSize: 18,
+    fontWeight: '600',
+  },
+  headerIcons: {
+    flexDirection: 'row',
+  },
+  iconButton: {
+    marginLeft: 16,
+    padding: 4,
+  },
+  scrollContent: {
+    paddingHorizontal: 24,
+    paddingBottom: 40,
+  },
+  welcomeText: {
+    fontSize: 32,
+    fontFamily: 'serif',
+    color: '#1A1A1A',
+    marginTop: 20,
+    marginBottom: 32,
+    textAlign: 'center',
+  },
+  filterRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginBottom: 40,
+  },
+  filterChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 24,
+    borderWidth: 1,
+    borderColor: '#F0F0F0',
+    marginHorizontal: 8,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  filterChipActive: {
+    borderColor: '#F0F0F0',
+    backgroundColor: '#fff',
+    // In the screenshot, the active chip has a subtle border, not very distinct
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  filterText: {
+    marginLeft: 8,
+    fontSize: 16,
+    color: '#666',
+  },
+  filterTextActive: {
+    color: '#1A1A1A',
+    fontWeight: '500',
+  },
+  documentList: {
+    marginBottom: 40,
+  },
+  uploadSection: {
+    alignItems: 'center',
+  },
+  uploadButton: {
+    width: '80%',
+    marginBottom: 16,
+  },
+  supportText: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    lineHeight: 18,
   },
 });
